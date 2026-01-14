@@ -1,5 +1,0 @@
-flask
-flask-cors
-feedparser
-deep-translator
-gunicorn
