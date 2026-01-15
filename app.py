@@ -5,16 +5,17 @@ from datetime import datetime, timedelta
 import re
 import time
 import random
-# 引入翻译库
 from deep_translator import GoogleTranslator
+import os
 
+# --- 适配 Vercel 的关键修改 ---
+# Vercel 运行时的路径可能和本地不一样，这样写最稳
 app = Flask(__name__, static_folder='static')
 CORS(app)
 
-# 初始化翻译器
 translator = GoogleTranslator(source='auto', target='zh-CN')
 
-# RSS 源配置
+# RSS 配置 (保持不变)
 RSS_FEEDS = {
     'all': 'https://news.google.com/rss/search?q=International+Film+Festival+news+OR+Cannes+OR+Venice+Film+Festival+OR+Sundance+when:30d&hl=en-US&gl=US&ceid=US:en',
     'sundance': 'https://news.google.com/rss/search?q=Sundance+Film+Festival+news+when:30d&hl=en-US&gl=US&ceid=US:en',
@@ -25,7 +26,7 @@ RSS_FEEDS = {
     'sxsw': 'https://news.google.com/rss/search?q=SXSW+Film+Festival+news+when:30d&hl=en-US&gl=US&ceid=US:en'
 }
 
-# 内存缓存
+# 缓存 (注意：Vercel 是 Serverless，缓存可能会在一段时间后重置，但短期内有效)
 NEWS_CACHE = {}
 CACHE_TIMEOUT = 1800 
 
@@ -42,43 +43,30 @@ def format_date(date_str):
         return datetime.now().strftime('%Y-%m-%d')
 
 def fetch_all_real_data(festival_id):
-    """【防崩溃版】抓取函数"""
     url = RSS_FEEDS.get(festival_id, RSS_FEEDS['all'])
-    print(f"Server: Start fetching [{festival_id}]...")
+    # 移除 print，Vercel 日志看着乱
     
     try:
-        # 设置超时时间，防止网络卡死
-        feed = feedparser.parse(url)
+        # Vercel 每次请求有时间限制（通常10秒），所以不要 sleep 太久
+        # time.sleep(0.1) # 在 Vercel 上可以把这里注释掉或设很短，因为它IP池很大，不易被封
         
-        if not feed.entries:
-            print("Warning: Google News returned 0 items. (Network issue?)")
-            return []
-
+        feed = feedparser.parse(url)
         all_articles = []
         
-        # 遍历每一条新闻
         for index, entry in enumerate(feed.entries):
-            # 获取基础信息
             raw_title = clean_text(entry.title)
-            # 安全获取 summary，如果没有则给默认值
-            raw_desc = clean_text(entry.summary) if hasattr(entry, 'summary') else "Click card to read full story on official site."
+            raw_desc = clean_text(entry.summary) if hasattr(entry, 'summary') else "Click to read full story."
             
             cn_title = raw_title
             cn_desc = raw_desc
 
-            # --- 翻译模块（带异常捕获）---
-            # 只翻译前 10 条，防止请求过多被封 IP
-            if index < 10:
+            # Vercel 免费版超时时间短，我们只翻译前 5 条，保证速度
+            if index < 5: 
                 try:
                     cn_title = translator.translate(raw_title)
-                    # 简介只翻译前100个字符
                     cn_desc = translator.translate(raw_desc[:100]) + "..."
-                except Exception as e:
-                    # 如果翻译失败，仅仅打印错误，不中断程序！
-                    print(f"Translation skipped for item {index}: {e}")
-                    # 保持英文原样
-                    cn_title = raw_title
-                    cn_desc = raw_desc
+                except:
+                    pass
 
             all_articles.append({
                 'id': entry.id,
@@ -91,19 +79,15 @@ def fetch_all_real_data(festival_id):
                 'link': entry.link
             })
             
-        print(f"Server: Successfully fetched {len(all_articles)} items.")
         return all_articles
-
-    except Exception as e:
-        # 捕获所有未知错误
-        print(f"CRITICAL ERROR in fetch: {e}")
+    except Exception:
         return []
 
-# --- 路由部分 ---
+# --- 路由 ---
 
 @app.route('/')
 def serve_index():
-    return send_from_directory(app.static_folder, 'index.html')
+    return send_from_directory('static', 'index.html')
 
 @app.route('/api/news/<festival_id>')
 def get_news_paginated(festival_id):
@@ -112,54 +96,37 @@ def get_news_paginated(festival_id):
         per_page = 16
         current_time = time.time()
         
-        # 缓存逻辑
         cache_entry = NEWS_CACHE.get(festival_id)
         
+        # 简单缓存逻辑
         if not cache_entry or (current_time - cache_entry['timestamp'] > CACHE_TIMEOUT):
             real_data = fetch_all_real_data(festival_id)
-            # 如果抓取失败（空列表），且缓存里有旧数据，就暂时用旧的
             if not real_data and cache_entry:
-                print("Using old cache due to fetch failure.")
                 real_data = cache_entry['data']
-            
-            NEWS_CACHE[festival_id] = {
-                'data': real_data,
-                'timestamp': current_time
-            }
+            NEWS_CACHE[festival_id] = {'data': real_data, 'timestamp': current_time}
         
         all_data = NEWS_CACHE[festival_id]['data']
         
-        # 如果完全没有数据（比如断网了），返回一个空的结构，而不是报错
         if not all_data:
-            return jsonify({
-                'articles': [],
-                'meta': {'current_page': 1, 'total_pages': 0, 'total_items': 0}
-            })
+            return jsonify({'articles': [], 'meta': {'current_page': 1, 'total_pages': 0}})
 
-        # 分页逻辑
         total_items = len(all_data)
         total_pages = (total_items + per_page - 1) // per_page
         start = (page - 1) * per_page
         end = start + per_page
-        page_data = all_data[start:end]
         
         return jsonify({
-            'articles': page_data,
+            'articles': all_data[start:end],
             'meta': {
                 'current_page': page,
                 'total_pages': total_pages,
                 'total_items': total_items
             }
         })
-
     except Exception as e:
-        print(f"API Route Error: {e}")
         return jsonify({'error': str(e)}), 500
 
+# Vercel 不需要 app.run()，但保留这行让你可以本地测试
 if __name__ == '__main__':
-    import os
-    port = int(os.environ.get('PORT', 5000))
-    print("---------------------------------------")
-    print(f" Server running on http://127.0.0.1:{port}")
-    print("---------------------------------------")
-    app.run(host='0.0.0.0', port=port)
+    app.run(port=5000, debug=True)
+
