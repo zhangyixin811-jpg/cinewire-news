@@ -11,7 +11,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 
     <style>
-        /* --- SAME CSS AS BEFORE --- */
+        /* --- CSS 部分 --- */
         :root { --bg: #030303; --card-bg: #0a0a0a; --text: #f0f0f0; --muted: #666666; --gold: #D4AF37; --border: rgba(255, 255, 255, 0.08); --hover: rgba(255, 255, 255, 0.05); --font-head: 'Cinzel', serif; --font-ui: 'Manrope', sans-serif; --ease: cubic-bezier(0.23, 1, 0.32, 1); }
         * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
         body { background-color: var(--bg); color: var(--text); font-family: var(--font-ui); height: 100vh; overflow: hidden; display: flex; flex-direction: column; }
@@ -41,6 +41,7 @@
         .page-title { font-family: var(--font-head); font-size: 3rem; font-weight: 400; margin-bottom: 40px; opacity: 0; animation: fadeIn 0.8s var(--ease) forwards; }
         .news-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 30px; flex: 1; }
 
+        /* Card Styles */
         .card { background: var(--card-bg); border: 1px solid var(--border); padding: 30px; min-height: 260px; display: flex; flex-direction: column; cursor: pointer; position: relative; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
         .card:hover { transform: translateY(-6px); background-color: #141414; border-color: rgba(255, 255, 255, 0.4); box-shadow: 0 20px 50px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.05); }
         .card-header { display: flex; justify-content: flex-end; align-items: center; margin-bottom: 25px; height: 32px; }
@@ -57,15 +58,11 @@
         .card-footer { border-top: 1px solid rgba(255,255,255,0.05); padding-top: 15px; font-size: 0.75rem; color: #444; text-transform: uppercase; letter-spacing: 1px; display: flex; justify-content: space-between; transition: border-color 0.3s; }
         .card:hover .card-footer { border-top-color: rgba(255,255,255,0.15); color: #888; }
         
-        .loader { padding: 60px; text-align: center; color: #444; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; display: none; }
+        /* 底部加载指示器 */
+        .loader { padding: 40px 0; text-align: center; color: #444; font-size: 0.8rem; letter-spacing: 2px; text-transform: uppercase; width: 100%; display: none; }
+        .end-message { padding: 40px 0; text-align: center; color: #444; font-size: 0.7rem; letter-spacing: 1px; text-transform: uppercase; width: 100%; display: none; }
+        
         @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-        .pagination { display: flex; justify-content: center; align-items: center; gap: 10px; margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--border); font-family: var(--font-ui); }
-        .page-btn { background: transparent; border: 1px solid var(--border); color: var(--muted); min-width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 4px; cursor: pointer; transition: all 0.3s; font-size: 0.8rem; }
-        .page-btn:hover:not(.disabled) { border-color: var(--text); color: var(--text); }
-        .page-btn.active { background: var(--gold); border-color: var(--gold); color: #000; font-weight: 700; }
-        .page-btn.disabled { opacity: 0.3; cursor: not-allowed; }
-        .page-ellipsis { color: var(--muted); }
     </style>
 </head>
 <body>
@@ -81,7 +78,7 @@
                 </button>
                 <button class="ui-btn">
                     <i class="fa-solid fa-arrow-down-wide-short"></i>
-                    <select class="ui-select" id="sort-select" onchange="app.sortFeed(this.value)">
+                    <select class="ui-select" id="sort-select" onchange="app.loadSortedFeed(this.value)">
                         <option value="latest">Latest</option>
                         <option value="hottest">Hottest</option>
                     </select>
@@ -101,9 +98,11 @@
         <main id="main-scroll">
             <div class="feed-container">
                 <h1 class="page-title" id="feed-title">Global Headlines</h1>
-                <div id="loader" class="loader">Loading...</div>
+                
                 <div class="news-grid" id="news-grid"></div>
-                <div class="pagination" id="pagination-container"></div>
+                
+                <div id="loader" class="loader">Loading more updates...</div>
+                <div id="end-message" class="end-message">End of Transmission</div>
             </div>
         </main>
     </div>
@@ -112,129 +111,123 @@
         const dictionary = {
             en: {
                 title: "Global Film Festival Information", navHeader: "Official Sources", recHeader: "Recommended Festivals",
-                refresh: "Refresh Feed", fav: "Favorites", latest: "Latest", hottest: "Hottest", loading: "Gathering Real-Time Data...",
-                noFavs: "No saved articles.", source: "Official Source", read: "Read Entry", headlines: "Global Headlines", favTitle: "My Favorites",
+                refresh: "Refresh Feed", fav: "Favorites", latest: "Latest", hottest: "Hottest", loading: "Gathering Data...", loadingMore: "Loading more...",
+                end: "End of Transmission", noFavs: "No saved articles.", source: "Official Source", read: "Read Entry", headlines: "Global Headlines", favTitle: "My Favorites",
                 festivals: { all: "All Festivals", sundance: "Sundance", berlin: "Berlinale", cannes: "Cannes", venice: "Venice", tiff: "TIFF", sxsw: "SXSW" }
             },
             cn: {
                 title: "全球电影节资讯", navHeader: "官方来源", recHeader: "推荐电影节",
-                refresh: "刷新内容", fav: "我的收藏", latest: "最新发布", hottest: "热门排行", loading: "正在抓取实时数据...",
-                noFavs: "暂无收藏文章。", source: "官方来源", read: "阅读原文", headlines: "全球头条", favTitle: "我的收藏",
+                refresh: "刷新内容", fav: "我的收藏", latest: "最新发布", hottest: "热门排行", loading: "正在抓取数据...", loadingMore: "正在加载更多...",
+                end: "内容已全部加载", noFavs: "暂无收藏文章。", source: "官方来源", read: "阅读原文", headlines: "全球头条", favTitle: "我的收藏",
                 festivals: { all: "全部电影节", sundance: "圣丹斯", berlin: "柏林电影节", cannes: "戛纳电影节", venice: "威尼斯电影节", tiff: "多伦多电影节", sxsw: "西南偏南" }
             }
         };
 
         const app = {
             lang: 'en', filter: 'latest', currentFest: 'all', isFavView: false, favorites: new Set(),
-            articles: [],
             
+            // 无限滚动状态管理
+            articles: [],
             currentPage: 1,
-            totalPages: 1, // 将由后端返回的真实数据总量决定
+            isLoading: false,
+            hasMore: true,
 
             init() {
                 this.renderSidebar();
-                this.loadData(1);
+                this.loadData(1, false); // 初始加载第1页，非追加模式
+                this.setupInfiniteScroll();
             },
 
-            async loadData(page) {
-                this.currentPage = page;
+            // --- 核心：加载数据 ---
+            async loadData(page, isAppend) {
+                if (this.isLoading) return; // 防止重复触发
+                this.isLoading = true;
+                
+                const loader = document.getElementById('loader');
+                const endMsg = document.getElementById('end-message');
                 const grid = document.getElementById('news-grid');
-                grid.innerHTML = ''; 
-                document.getElementById('pagination-container').innerHTML = ''; 
-                document.getElementById('loader').style.display = 'block';
-                document.getElementById('loader').innerText = dictionary[this.lang].loading;
+                
+                loader.style.display = 'block';
+                loader.innerText = isAppend ? dictionary[this.lang].loadingMore : dictionary[this.lang].loading;
+                endMsg.style.display = 'none';
+
+                if (!isAppend) {
+                    grid.innerHTML = ''; // 清空列表
+                    this.currentPage = 1;
+                    this.hasMore = true;
+                }
 
                 try {
-                   const res = await fetch(`/api/news/${this.currentFest}?page=${page}`);
+                    // 发送排序参数 (sort) 给后端
+                    const res = await fetch(`/api/news/${this.currentFest}?page=${page}&sort=${this.filter}`);
                     if (!res.ok) throw new Error("Backend Error");
                     
                     const responseData = await res.json();
+                    const newArticles = responseData.articles;
                     
-                    // 获取数据和元数据
-                    this.articles = responseData.articles;
-                    this.totalPages = responseData.meta.total_pages; // 后端告诉我们一共有几页真数据
+                    // 更新状态
+                    this.hasMore = responseData.meta.has_more;
                     
-                    this.renderFeed();    
-                    this.renderPagination(); 
-                    document.getElementById('main-scroll').scrollTop = 0;
+                    if (isAppend) {
+                        this.articles = [...this.articles, ...newArticles];
+                    } else {
+                        this.articles = newArticles;
+                        document.getElementById('main-scroll').scrollTop = 0; // 回到顶部
+                    }
+                    
+                    this.renderFeed(newArticles, isAppend);
 
                 } catch (error) {
-                    grid.innerHTML = '<div style="color:#666; text-align:center; grid-column:1/-1;">Connection Failed. Ensure python app.py is running.</div>';
+                    if(!isAppend) grid.innerHTML = '<div style="color:#666; text-align:center; grid-column:1/-1;">Connection Failed.</div>';
                 } finally {
-                    document.getElementById('loader').style.display = 'none';
+                    this.isLoading = false;
+                    loader.style.display = 'none';
+                    if (!this.hasMore) endMsg.style.display = 'block';
                 }
             },
 
-            toggleLang() {
-                this.lang = this.lang === 'en' ? 'cn' : 'en';
-                const t = dictionary[this.lang];
+            // --- 监听滚动 ---
+            setupInfiniteScroll() {
+                const main = document.getElementById('main-scroll');
+                main.addEventListener('scroll', () => {
+                    // 如果在加载中、或者是收藏页、或者没有更多数据了，就不动作
+                    if (this.isLoading || this.isFavView || !this.hasMore) return;
 
-                document.getElementById('site-name').innerText = t.title;
-                document.getElementById('nav-head-main').innerText = t.navHeader;
-                document.getElementById('txt-refresh').innerText = t.refresh;
-                document.getElementById('txt-fav').innerText = t.fav;
-                document.getElementById('txt-lang').innerText = this.lang.toUpperCase();
-                
-                const sel = document.getElementById('sort-select');
-                sel.options[0].text = t.latest;
-                sel.options[1].text = t.hottest;
-
-                this.renderSidebar();
-                
-                const mainTitle = this.isFavView ? t.favTitle : (this.currentFest === 'all' ? t.headlines : t.festivals[this.currentFest]);
-                document.getElementById('feed-title').innerText = mainTitle;
-                
-                this.renderFeed();
-                if(!this.isFavView) this.renderPagination();
-            },
-
-            renderSidebar() {
-                const list = document.getElementById('sidebar-list');
-                const t = dictionary[this.lang];
-                list.innerHTML = '';
-                
-                const allBtn = document.createElement('button');
-                allBtn.className = `fest-btn ${this.currentFest === 'all' ? 'active' : ''}`;
-                allBtn.innerText = t.festivals['all'];
-                allBtn.onclick = () => this.filterFest('all');
-                list.appendChild(allBtn);
-
-                const recHeader = document.createElement('div');
-                recHeader.className = 'nav-header secondary';
-                recHeader.innerText = t.recHeader;
-                list.appendChild(recHeader);
-                
-                ['sundance', 'berlin', 'cannes', 'venice', 'tiff', 'sxsw'].forEach(key => {
-                    const btn = document.createElement('button');
-                    btn.className = `fest-btn ${this.currentFest === key ? 'active' : ''}`;
-                    btn.innerText = t.festivals[key];
-                    btn.onclick = () => this.filterFest(key);
-                    list.appendChild(btn);
+                    // 距离底部 100px 时触发加载
+                    if (main.scrollTop + main.clientHeight >= main.scrollHeight - 100) {
+                        this.currentPage++;
+                        this.loadData(this.currentPage, true); // 追加模式
+                    }
                 });
             },
 
-            renderFeed() {
+            // --- 切换排序 (触发重新加载) ---
+            loadSortedFeed(val) {
+                this.filter = val;
+                // 排序改变了，必须从第1页重新向后端请求，因为"最热"可能会改变整个列表的顺序
+                this.loadData(1, false); 
+            },
+
+            renderFeed(articlesToRender, isAppend) {
                 const grid = document.getElementById('news-grid');
-                grid.innerHTML = '';
-                
-                let data = this.isFavView ? this.articles.filter(a => this.favorites.has(a.id)) : this.articles;
-
-                if (this.filter === 'latest') {
-                    data.sort((a, b) => new Date(b.date) - new Date(a.date));
-                } else {
-                    data.sort((a, b) => b.views - a.views);
-                }
-
-                if (data.length === 0) {
-                    grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#555; padding:50px;">${dictionary[this.lang].noFavs}</div>`;
-                    return;
-                }
-
                 const t = dictionary[this.lang];
                 
-                data.forEach((art, i) => {
+                // 如果是收藏页，渲染本地过滤的数据
+                if (this.isFavView) {
+                    grid.innerHTML = '';
+                    const favData = this.articles.filter(a => this.favorites.has(a.id));
+                    if (favData.length === 0) {
+                        grid.innerHTML = `<div style="grid-column:1/-1; text-align:center; color:#555; padding:50px;">${t.noFavs}</div>`;
+                        return;
+                    }
+                    articlesToRender = favData;
+                }
+
+                // 渲染卡片
+                articlesToRender.forEach((art, i) => {
                     const el = document.createElement('div');
                     el.className = 'card';
+                    // 如果是追加加载，给点小动画
                     el.style.animation = `fadeIn 0.6s cubic-bezier(0.23, 1, 0.32, 1) forwards ${i * 0.05}s`;
                     el.style.opacity = '0';
                     el.onclick = (e) => window.open(art.link, '_blank');
@@ -263,45 +256,55 @@
                 });
             },
 
-            renderPagination() {
-                if (this.isFavView) return;
+            toggleLang() {
+                this.lang = this.lang === 'en' ? 'cn' : 'en';
+                const t = dictionary[this.lang];
 
-                const container = document.getElementById('pagination-container');
-                container.innerHTML = '';
-                const total = this.totalPages;
-                const current = this.currentPage;
+                document.getElementById('site-name').innerText = t.title;
+                document.getElementById('nav-head-main').innerText = t.navHeader;
+                document.getElementById('txt-refresh').innerText = t.refresh;
+                document.getElementById('txt-fav').innerText = t.fav;
+                document.getElementById('txt-lang').innerText = this.lang.toUpperCase();
+                document.getElementById('end-message').innerText = t.end;
+                
+                const sel = document.getElementById('sort-select');
+                sel.options[0].text = t.latest;
+                sel.options[1].text = t.hottest;
 
-                // 如果没有数据或只有1页，不显示分页
-                if(total <= 1) return;
+                this.renderSidebar();
+                
+                const mainTitle = this.isFavView ? t.favTitle : (this.currentFest === 'all' ? t.headlines : t.festivals[this.currentFest]);
+                document.getElementById('feed-title').innerText = mainTitle;
+                
+                // 重新渲染当前 DOM 中的卡片以更新语言
+                const grid = document.getElementById('news-grid');
+                grid.innerHTML = ''; 
+                this.renderFeed(this.articles, true); 
+            },
 
-                const createBtn = (text, page, isActive = false, isDisabled = false) => {
+            renderSidebar() {
+                const list = document.getElementById('sidebar-list');
+                const t = dictionary[this.lang];
+                list.innerHTML = '';
+                
+                const allBtn = document.createElement('button');
+                allBtn.className = `fest-btn ${this.currentFest === 'all' ? 'active' : ''}`;
+                allBtn.innerText = t.festivals['all'];
+                allBtn.onclick = () => this.filterFest('all');
+                list.appendChild(allBtn);
+
+                const recHeader = document.createElement('div');
+                recHeader.className = 'nav-header secondary';
+                recHeader.innerText = t.recHeader;
+                list.appendChild(recHeader);
+                
+                ['sundance', 'berlin', 'cannes', 'venice', 'tiff', 'sxsw'].forEach(key => {
                     const btn = document.createElement('button');
-                    btn.className = `page-btn ${isActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`;
-                    btn.innerText = text;
-                    if (!isDisabled) {
-                        btn.onclick = () => this.loadData(page);
-                    }
-                    return btn;
-                };
-
-                container.appendChild(createBtn('<', current - 1, false, current === 1));
-
-                if (total <= 7) {
-                    for (let i = 1; i <= total; i++) container.appendChild(createBtn(i, i, current === i));
-                } else {
-                    container.appendChild(createBtn(1, 1, current === 1));
-                    if (current > 4) container.innerHTML += '<span class="page-ellipsis">...</span>';
-                    
-                    let start = Math.max(2, current - 2);
-                    let end = Math.min(total - 1, current + 2);
-                    
-                    for (let i = start; i <= end; i++) container.appendChild(createBtn(i, i, current === i));
-                    
-                    if (current < total - 3) container.innerHTML += '<span class="page-ellipsis">...</span>';
-                    container.appendChild(createBtn(total, total, current === total));
-                }
-
-                container.appendChild(createBtn('>', current + 1, false, current === total));
+                    btn.className = `fest-btn ${this.currentFest === key ? 'active' : ''}`;
+                    btn.innerText = t.festivals[key];
+                    btn.onclick = () => this.filterFest(key);
+                    list.appendChild(btn);
+                });
             },
 
             toggleFav(id, btn, e) {
@@ -310,7 +313,10 @@
                     this.favorites.delete(id);
                     btn.classList.remove('active');
                     btn.innerHTML = '<i class="fa-regular fa-heart"></i>';
-                    if (this.isFavView) this.renderFeed();
+                    if (this.isFavView) {
+                         // 在收藏页取消收藏，直接移除该元素
+                         btn.closest('.card').style.display = 'none';
+                    }
                 } else {
                     this.favorites.add(id);
                     btn.classList.add('active');
@@ -322,24 +328,22 @@
                 this.isFavView = !this.isFavView;
                 const btn = document.getElementById('btn-favs');
                 const t = dictionary[this.lang];
-                const pageContainer = document.getElementById('pagination-container');
+                const loader = document.getElementById('loader');
+                const endMsg = document.getElementById('end-message');
 
                 if (this.isFavView) {
                     btn.classList.add('active');
                     document.getElementById('feed-title').innerText = t.favTitle;
-                    pageContainer.style.display = 'none';
+                    loader.style.display = 'none';
+                    endMsg.style.display = 'none';
                 } else {
                     btn.classList.remove('active');
                     document.getElementById('feed-title').innerText = this.currentFest === 'all' ? t.headlines : t.festivals[this.currentFest];
-                    pageContainer.style.display = 'flex';
-                    this.renderPagination();
                 }
-                this.renderFeed();
-            },
-
-            sortFeed(val) {
-                this.filter = val;
-                this.renderFeed();
+                // 渲染
+                const grid = document.getElementById('news-grid');
+                grid.innerHTML = '';
+                this.renderFeed(this.articles, false);
             },
 
             refreshFeed() {
@@ -349,9 +353,7 @@
                 setTimeout(() => {
                     icon.style.transition = 'none';
                     icon.style.transform = 'rotate(0deg)';
-                    
-                    // 刷新时清空缓存，重新抓取最新的
-                    this.loadData(1);
+                    this.loadData(1, false);
                 }, 800);
             },
 
@@ -365,13 +367,14 @@
                 document.getElementById('feed-title').innerText = id === 'all' ? t.headlines : festName;
                 
                 this.renderSidebar();
-                
-                // 切换源，默认回第1页
-                this.loadData(1);
+                this.loadData(1, false);
             }
         };
 
         window.addEventListener('DOMContentLoaded', () => app.init());
     </script>
 </body>
+</html>
+</body>
+
 </html>
